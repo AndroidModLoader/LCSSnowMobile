@@ -2,9 +2,13 @@
 #include <mod/logger.h>
 #include "isautils.h"
 
-#include "GTASA_STRUCTS.h"
+#ifdef AML32
+    #include "GTASA_STRUCTS.h"
+#else
+    #include "GTASA_STRUCTS_210.h"
+#endif
 
-MYMOD(net.erorcun.rusjj.lcssnow, LCSSnow, 1.0, erorcun & RusJJ)
+MYMOD(net.erorcun.rusjj.lcssnow, LCSSnow, 1.1, erorcun & RusJJ)
 NEEDGAME(com.rockstargames.gtasa)
 
 #define SQUEEZE_FPS
@@ -226,8 +230,8 @@ extern "C" void OnModLoad()
     hGTASA = aml->GetLibHandle("libGTASA.so");
 
     // Hooks
-    HOOKPLT(GameInit2, pGTASA + 0x672178);
-    HOOKPLT(RenderRainStreaks, pGTASA + 0x673BD0);
+    HOOKPLT(GameInit2, pGTASA + BYBIT(0x672178, 0x843A80));
+    HOOKPLT(RenderRainStreaks, pGTASA + BYBIT(0x673BD0, 0x846540));
 
     // Getters
     SET_TO(TheCamera, aml->GetSym(hGTASA, "TheCamera"));
