@@ -26,7 +26,7 @@ uintptr_t pGTASA;
 void* hGTASA;
 ISAUtils* sautils;
 
-float Snow, TargetSnow = 1;
+float Snow = 0, TargetSnow = 1;
 float TurnOffTime;
 CBox SnowBox;
 CMatrix SnowMat;
