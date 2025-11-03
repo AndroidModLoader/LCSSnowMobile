@@ -22,8 +22,8 @@ struct OneSnowFlake
 RwRGBA rwRgbaWhite(0xFF, 0xFF, 0xFF, 0xFF);
 
 // Savings
-uintptr_t pGTASA;
-void* hGTASA;
+uintptr_t pGame;
+void* hGame;
 ISAUtils* sautils;
 
 float Snow = 0, TargetSnow = 1;
@@ -36,6 +36,17 @@ RwRaster* SnowFlakeRaster = NULL;
 bool SnowFlakesInitialised = false, SnowVisible = true;
 OneSnowFlake* SnowFlakesArray = NULL;
 int MaxSnowFlakes = 2000, CurrentSnowFlakes = 0.75f * MaxSnowFlakes;
+
+static uint16_t snowRenderOrder[] = { 0, 1, 2, 3, 4, 5 };
+static RwIm3DVertex snowVertexBuffer[] =
+{
+    { RwV3d {  0.07, 0.00,  0.07 }, RwV3d(), rwRgbaWhite, 1.0f, 1.0f },
+    { RwV3d { -0.07, 0.00,  0.07 }, RwV3d(), rwRgbaWhite, 0.0f, 1.0f },
+    { RwV3d { -0.07, 0.00, -0.07 }, RwV3d(), rwRgbaWhite, 0.0f, 0.0f },
+    { RwV3d {  0.07, 0.00,  0.07 }, RwV3d(), rwRgbaWhite, 1.0f, 1.0f },
+    { RwV3d {  0.07, 0.00, -0.07 }, RwV3d(), rwRgbaWhite, 1.0f, 0.0f },
+    { RwV3d { -0.07, 0.00, -0.07 }, RwV3d(), rwRgbaWhite, 0.0f, 0.0f },
+            };
 
 // Game Vars
 CCamera *TheCamera;
@@ -82,7 +93,7 @@ inline void AddSnow()
     {
         int SnowAmount = fmin(CurrentSnowFlakes, Snow * CurrentSnowFlakes);
 
-        CVector& camPos = TheCamera->GetPosition();
+        CVector camPos = TheCamera->GetPosition();
         SnowBox.m_vecMin = { camPos.x - 40.0f, camPos.y - 40.0f, camPos.z - 15.0f };
         SnowBox.m_vecMax = { camPos.x + 40.0f, camPos.y + 40.0f, camPos.z + 15.0f };
 
@@ -112,17 +123,6 @@ inline void AddSnow()
         SnowMat = *TheCamera->GetMatrix();
         for(int i = 0; i < SnowAmount; ++i)
         {
-            static uint16_t snowRenderOrder[] = { 0, 1, 2, 3, 4, 5 };
-            static RwIm3DVertex snowVertexBuffer[] =
-            {
-                { RwV3d {  0.07, 0.00,  0.07 }, RwV3d(), rwRgbaWhite, 1.0f, 1.0f },
-                { RwV3d { -0.07, 0.00,  0.07 }, RwV3d(), rwRgbaWhite, 0.0f, 1.0f },
-                { RwV3d { -0.07, 0.00, -0.07 }, RwV3d(), rwRgbaWhite, 0.0f, 0.0f },
-                { RwV3d {  0.07, 0.00,  0.07 }, RwV3d(), rwRgbaWhite, 1.0f, 1.0f },
-                { RwV3d {  0.07, 0.00, -0.07 }, RwV3d(), rwRgbaWhite, 1.0f, 0.0f },
-                { RwV3d { -0.07, 0.00, -0.07 }, RwV3d(), rwRgbaWhite, 0.0f, 0.0f },
-            };
-
             float& xPos = SnowFlakesArray[i].pos.x;
             float& yPos = SnowFlakesArray[i].pos.y;
             float& zPos = SnowFlakesArray[i].pos.z;
@@ -209,43 +209,54 @@ void OnSnowVisibilityChanged(int oldVal, int newVal, void* data)
 
 
 // Hooks
-DECL_HOOKv(GameInit2)
+DECL_HOOKb(GameInit2, const char* pDatFile)
 {
-    GameInit2();
+    bool ret = GameInit2(pDatFile);
 
     SnowFlakeTexture = RwTextureRead("shad_exp", NULL);
     SnowFlakeRaster = SnowFlakeTexture->raster;
+
+    return ret;
 }
-DECL_HOOKv(RenderRainStreaks)
+DECL_HOOKv(RenderRainStreaksSA)
 {
     if(SnowVisible) AddSnow();
-    RenderRainStreaks();
+    RenderRainStreaksSA();
+}
+DECL_HOOKv(RenderRainStreaksVC)
+{
+    if(SnowVisible) AddSnow();
+    RenderRainStreaksVC();
 }
 
 // int main!
-extern "C" void OnModLoad()
+ON_MOD_LOAD()
 {
     logger->SetTag("LCSSnowMobile");
-    pGTASA = aml->GetLib("libGTASA.so");
-    hGTASA = aml->GetLibHandle("libGTASA.so");
 
-    // Hooks
-    HOOKPLT(GameInit2, pGTASA + BYBIT(0x672178, 0x843A80));
-    HOOKPLT(RenderRainStreaks, pGTASA + BYBIT(0x673BD0, 0x846540));
+    if((pGame = aml->GetLib("libGTASA.so")) && (hGame = aml->GetLibHandle("libGTASA.so")))
+    {
+        HOOKPLT(GameInit2, pGame + BYBIT(0x672178, 0x843A80));
+        HOOKPLT(RenderRainStreaksSA, pGame + BYBIT(0x673BD0, 0x846540));
+    }
+    else if((pGame = aml->GetLib("libGTAVC.so")) && (hGame = aml->GetLibHandle("libGTAVC.so")))
+    {
+        HOOKBL(RenderRainStreaksVC, pGame + 0x14EAAE);
+    }
 
     // Getters
-    SET_TO(TheCamera, aml->GetSym(hGTASA, "TheCamera"));
-    SET_TO(InterpolationValue, aml->GetSym(hGTASA, "_ZN8CWeather18InterpolationValueE"));
-    SET_TO(UnderWaterness, aml->GetSym(hGTASA, "_ZN8CWeather14UnderWaternessE"));
-    SET_TO(ms_fTimeStep, aml->GetSym(hGTASA, "_ZN6CTimer12ms_fTimeStepE"));
+    SET_TO(TheCamera, aml->GetSym(hGame, "TheCamera"));
+    SET_TO(InterpolationValue, aml->GetSym(hGame, "_ZN8CWeather18InterpolationValueE"));
+    SET_TO(UnderWaterness, aml->GetSym(hGame, "_ZN8CWeather14UnderWaternessE"));
+    SET_TO(ms_fTimeStep, aml->GetSym(hGame, "_ZN6CTimer12ms_fTimeStepE"));
 
-    SET_TO(CamNoRain, aml->GetSym(hGTASA, "_ZN10CCullZones9CamNoRainEv"));
-    SET_TO(PlayerNoRain, aml->GetSym(hGTASA, "_ZN10CCullZones12PlayerNoRainEv"));
-    SET_TO(RwRenderStateSet, aml->GetSym(hGTASA, "_Z16RwRenderStateSet13RwRenderStatePv"));
-    SET_TO(RwTextureRead, aml->GetSym(hGTASA, "_Z13RwTextureReadPKcS0_"));
-    SET_TO(RwIm3DTransform, aml->GetSym(hGTASA, "_Z15RwIm3DTransformP18RxObjSpace3DVertexjP11RwMatrixTagj"));
-    SET_TO(RwIm3DRenderIndexedPrimitive, aml->GetSym(hGTASA, "_Z28RwIm3DRenderIndexedPrimitive15RwPrimitiveTypePti"));
-    SET_TO(RwIm3DEnd, aml->GetSym(hGTASA, "_Z9RwIm3DEndv"));
+    SET_TO(CamNoRain, aml->GetSym(hGame, "_ZN10CCullZones9CamNoRainEv"));
+    SET_TO(PlayerNoRain, aml->GetSym(hGame, "_ZN10CCullZones12PlayerNoRainEv"));
+    SET_TO(RwRenderStateSet, aml->GetSym(hGame, "_Z16RwRenderStateSet13RwRenderStatePv"));
+    SET_TO(RwTextureRead, aml->GetSym(hGame, "_Z13RwTextureReadPKcS0_"));
+    SET_TO(RwIm3DTransform, aml->GetSym(hGame, "_Z15RwIm3DTransformP18RxObjSpace3DVertexjP11RwMatrixTagj"));
+    SET_TO(RwIm3DRenderIndexedPrimitive, aml->GetSym(hGame, "_Z28RwIm3DRenderIndexedPrimitive15RwPrimitiveTypePti"));
+    SET_TO(RwIm3DEnd, aml->GetSym(hGame, "_Z9RwIm3DEndv"));
 
     // MLS
     sautils = (ISAUtils*)GetInterface("SAUtils");
